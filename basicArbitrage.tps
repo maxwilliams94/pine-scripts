@@ -18,6 +18,9 @@ fixedSellCash = input.float(50, "Fixed Sell Cash", minval=0.01, tooltip="Cash am
 // Percentage Mode
 buyPercentage = input.float(10, "Buy % of Available Cash", minval=0.01, maxval=100, tooltip="Percentage of available cash to use for buys", group="Trading")
 sellPercentage = input.float(10, "Sell % of Current Position", minval=0.01, maxval=100, tooltip="Percentage of current position to sell", group="Trading")
+// Minimum Transaction Amounts
+minimumBuyCash = input.float(50, "Minimum Buy Amount", minval=0.01, tooltip="Minimum cash amount for buy orders (enforces minimum trade size)", group="Trading")
+minimumSellCash = input.float(25, "Minimum Sell Amount", minval=0.01, tooltip="Minimum cash amount for sell orders (ensures meaningful exits)", group="Trading")
 
 // Price Movement Thresholds
 enableBuy = input.bool(true, "Enable Buy", tooltip="If checked, buy orders will be placed", group="Trading", inline="buyToggle")
@@ -114,12 +117,16 @@ if strategy.closedtrades > lastClosedTradesCount
 // BUY CONDITION: Price movement meets buy threshold and we're in the trading window
 if enableBuy and buySignal and inTradingWindow
     actualBuyCash = tradingMode == "Fixed" ? fixedBuyCash : strategy.equity * buyPercentage / 100
-    buyComment = "BUY $" + str.tostring(actualBuyCash, "#,##0.00")
-    strategy.order("Buy Order", strategy.long, qty=buyQuantity, comment=buyComment)
-    // Update cost basis for buy
-    if buyQuantity > 0
-        totalCostBasis := totalCostBasis + (buyQuantity * close)
-        totalQuantityHeld := totalQuantityHeld + buyQuantity
+    // Enforce minimum buy amount
+    actualBuyCash := math.max(actualBuyCash, minimumBuyCash)
+    actualBuyQuantity = actualBuyCash / close
+    
+    if actualBuyQuantity > 0
+        buyComment = "BUY $" + str.tostring(actualBuyCash, "#,##0.00")
+        strategy.order("Buy Order", strategy.long, qty=actualBuyQuantity, comment=buyComment)
+        // Update cost basis for buy
+        totalCostBasis := totalCostBasis + (actualBuyQuantity * close)
+        totalQuantityHeld := totalQuantityHeld + actualBuyQuantity
         if totalQuantityHeld > 0
             averageCostBasis := totalCostBasis / totalQuantityHeld
 
@@ -128,21 +135,24 @@ if enableSell and sellSignal and inTradingWindow and strategy.position_size > 0
     // Check cost basis constraint - don't sell below average cost basis
     canSell = not respectCostBasis or close >= averageCostBasis
     
-    actualSellQty = math.min(sellQuantity, strategy.position_size)
-    
-    if canSell and actualSellQty > 0
+    if canSell
         actualSellCash = tradingMode == "Fixed" ? fixedSellCash : strategy.position_size * sellPercentage / 100
-        sellComment = "SELL $" + str.tostring(actualSellCash, "#,##0.00")
-        strategy.order("Sell Order", strategy.short, qty=actualSellQty, comment=sellComment)
-        // Update cost basis for sell
-        if totalQuantityHeld > 0
-            costRemoved = (actualSellQty / totalQuantityHeld) * totalCostBasis
-            totalCostBasis := math.max(0, totalCostBasis - costRemoved)
-            totalQuantityHeld := math.max(0, totalQuantityHeld - actualSellQty)
+        // Enforce minimum sell amount
+        actualSellCash := math.max(actualSellCash, minimumSellCash)
+        actualSellQty = math.min(actualSellCash / close, strategy.position_size)
+        
+        if actualSellQty > 0
+            sellComment = "SELL $" + str.tostring(actualSellQty * close, "#,##0.00")
+            strategy.order("Sell Order", strategy.short, qty=actualSellQty, comment=sellComment)
+            // Update cost basis for sell
             if totalQuantityHeld > 0
-                averageCostBasis := totalCostBasis / totalQuantityHeld
-            else
-                averageCostBasis := 0.0
+                costRemoved = (actualSellQty / totalQuantityHeld) * totalCostBasis
+                totalCostBasis := math.max(0, totalCostBasis - costRemoved)
+                totalQuantityHeld := math.max(0, totalQuantityHeld - actualSellQty)
+                if totalQuantityHeld > 0
+                    averageCostBasis := totalCostBasis / totalQuantityHeld
+                else
+                    averageCostBasis := 0.0
 
 // EXIT ON LAST BAR: Close all positions if enabled
 if exitOnLastBar and isLastBar and strategy.position_size > 0

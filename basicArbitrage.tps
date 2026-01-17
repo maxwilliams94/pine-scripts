@@ -2,7 +2,7 @@
 // © Arbitrage Strategy
 
 //@version=6
-strategy("ContainedExcitement's Arbitrage", overlay=true, fill_orders_on_standard_ohlc=true, process_orders_on_close=true, pyramiding=1000, initial_capital=10000)
+strategy("ContainedExcitement's Arbitrage", overlay=true, fill_orders_on_standard_ohlc=true, calc_on_every_tick=true, process_orders_on_close=true, pyramiding=1000, initial_capital=10000)
 
 // ============================================================================
 // INPUT PARAMETERS
@@ -146,7 +146,7 @@ if enableSell and sellSignal and inTradingWindow and strategy.position_size > 0
 
 // EXIT ON LAST BAR: Close all positions if enabled
 if exitOnLastBar and isLastBar and strategy.position_size > 0
-    strategy.close_all(comment="Closing position on last historical bar")
+    strategy.exit("Exit Last Bar", limit=close, qty_percent=100)
     totalCostBasis := 0.0
     totalQuantityHeld := 0.0
     averageCostBasis := 0.0

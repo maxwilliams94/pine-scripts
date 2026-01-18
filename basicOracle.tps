@@ -28,7 +28,7 @@ sellThreshold = input.float(3.5, "Sell on % Move", tooltip="Trigger sell when ba
 
 // Cost Basis Control
 respectCostBasis = input.bool(true, "Respect Cost Basis", tooltip="If enabled, will not sell below average cost basis", group="Cost Basis")
-minProfitPercentage = input.float(0, "Minimum Profit %", minval=0, tooltip="Minimum profit percentage above cost basis required to sell (e.g., 3 means sell only when price >= costBasis * 1.03)", group="Cost Basis")
+minProfitPercentage = input.float(10, "Minimum Profit %", minval=0, tooltip="Minimum profit percentage above cost basis required to sell (e.g., 10 means sell only when price >= costBasis * 1.10)", group="Cost Basis")
 showCostBasis = input.bool(true, "Show Cost Basis", group="Cost Basis", tooltip="If enabled, displays the average cost basis on the chart")
 showPositionSize = input.bool(true, "Show Position Size", group="Cost Basis", tooltip="If enabled, displays the current number of coins/shares owned on the chart")
 

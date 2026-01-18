@@ -2,15 +2,18 @@
 // © Arbitrage Strategy
 
 //@version=6
-strategy("ContainedExcitement's Arbitrage", overlay=true, fill_orders_on_standard_ohlc=true, calc_on_every_tick=true, process_orders_on_close=true, pyramiding=1000, initial_capital=10000)
+strategy("ContainedExcitement's Oracle", overlay=true, fill_orders_on_standard_ohlc=true, calc_on_every_tick=true, process_orders_on_close=true, pyramiding=1000, initial_capital=10000)
 
 // ============================================================================
 // INPUT PARAMETERS
 // ============================================================================
 
-// Fixed Amount Mode
-fixedBuyCash = input.float(100, "Fixed Buy Cash", minval=0.01, tooltip="Cash amount to spend on each buy", group="Trading")
-fixedSellCash = input.float(50, "Fixed Sell Cash", minval=0.01, tooltip="Cash amount target for each sell", group="Trading")
+// Percentage Mode
+buyPercentage = input.float(10, "Buy % of Available Cash", minval=0.01, maxval=100, tooltip="Percentage of available cash to use for buys", group="Trading")
+sellPercentage = input.float(10, "Sell % of Current Position", minval=0.01, maxval=100, tooltip="Percentage of current position to sell", group="Trading")
+// Minimum Transaction Amounts
+minimumBuyCash = input.float(50, "Minimum Buy Amount", minval=0.01, tooltip="Minimum cash amount for buy orders (enforces minimum trade size)", group="Trading")
+minimumSellCash = input.float(25, "Minimum Sell Amount", minval=0.01, tooltip="Minimum cash amount for sell orders (ensures meaningful exits)", group="Trading")
 
 // Initial Equity & Cost Basis
 initialQuantity = input.float(0, "Initial Quantity Held", minval=0, tooltip="Existing quantity of asset already held", group="Trading")
@@ -25,6 +28,7 @@ sellThreshold = input.float(3.5, "Sell on % Move", tooltip="Trigger sell when ba
 
 // Cost Basis Control
 respectCostBasis = input.bool(true, "Respect Cost Basis", tooltip="If enabled, will not sell below average cost basis", group="Cost Basis")
+minProfitPercentage = input.float(0, "Minimum Profit %", minval=0, tooltip="Minimum profit percentage above cost basis required to sell (e.g., 3 means sell only when price >= costBasis * 1.03)", group="Cost Basis")
 showCostBasis = input.bool(true, "Show Cost Basis", group="Cost Basis", tooltip="If enabled, displays the average cost basis on the chart")
 showPositionSize = input.bool(true, "Show Position Size", group="Cost Basis", tooltip="If enabled, displays the current number of coins/shares owned on the chart")
 
@@ -97,11 +101,11 @@ barPriceMovePct = ((close - open) / open) * 100
 buySignal = barPriceMovePct <= buyThreshold
 sellSignal = barPriceMovePct >= sellThreshold
 
-// Calculate quantities for fixed mode
-buyQuantity = fixedBuyCash / close
-sellQuantity = fixedSellCash / close
-buyCashAmount = fixedBuyCash
-sellCashAmount = fixedSellCash
+// Calculate quantities for percentage mode
+buyQuantity = (strategy.equity * buyPercentage / 100) / close
+sellQuantity = strategy.position_size * sellPercentage / 100
+buyCashAmount = strategy.equity * buyPercentage / 100
+sellCashAmount = strategy.position_size * sellPercentage / 100
 
 // Apply capital limit if enabled
 if limitToAvailableCapital
@@ -122,7 +126,9 @@ if strategy.closedtrades > lastClosedTradesCount
 
 // BUY CONDITION: Price movement meets buy threshold and we're in the trading window
 if enableBuy and buySignal and inTradingWindow
-    actualBuyCash = fixedBuyCash
+    actualBuyCash = strategy.equity * buyPercentage / 100
+    // Enforce minimum buy amount
+    actualBuyCash := math.max(actualBuyCash, minimumBuyCash)
     actualBuyQuantity = actualBuyCash / close
     
     if actualBuyQuantity > 0
@@ -136,11 +142,14 @@ if enableBuy and buySignal and inTradingWindow
 
 // SELL CONDITION: Price movement meets sell threshold, we're in the trading window, and we have a position
 if enableSell and sellSignal and inTradingWindow and strategy.position_size > 0
-    // Check cost basis constraint - don't sell below average cost basis
-    canSell = not respectCostBasis or close >= averageCostBasis
+    // Check cost basis constraint with minimum profit requirement
+    minProfitPrice = averageCostBasis * (1 + minProfitPercentage / 100)
+    canSell = not respectCostBasis or close >= minProfitPrice
     
     if canSell
-        actualSellCash = fixedSellCash
+        actualSellCash = strategy.position_size * sellPercentage / 100
+        // Enforce minimum sell amount
+        actualSellCash := math.max(actualSellCash, minimumSellCash)
         actualSellQty = math.min(actualSellCash / close, strategy.position_size)
         
         if actualSellQty > 0
@@ -178,8 +187,8 @@ currentCryptoDollars = strategy.position_size
 currentCryptoValue = strategy.position_size * close
 currentCash = strategy.equity - currentCryptoValue
 portfolioValue = strategy.equity
-nextBuyValue = fixedBuyCash
-nextSellValue = fixedSellCash
+nextBuyValue = strategy.equity * buyPercentage / 100
+nextSellValue = strategy.position_size * sellPercentage / 100
 
 // Plot values to data window
 plot(currentCryptoDollars, "Current Crypto (#)", display=display.data_window)

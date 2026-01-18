@@ -177,6 +177,9 @@ plot(showPositionSize ? strategy.position_size : na, "Position Size", color=colo
 currentCryptoDollars = strategy.position_size
 currentCryptoValue = strategy.position_size * close
 currentCash = strategy.equity - currentCryptoValue
+
+// Plot current cash line
+plot(currentCash, "Current Cash", color=color.orange, linewidth=2, style=plot.style_line)
 portfolioValue = strategy.equity
 nextBuyValue = fixedBuyCash
 nextSellValue = fixedSellCash

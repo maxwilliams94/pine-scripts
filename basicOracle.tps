@@ -147,7 +147,8 @@ if enableSell and sellSignal and inTradingWindow and strategy.position_size > 0
     canSell = not respectCostBasis or close >= minProfitPrice
     
     if canSell
-        actualSellCash = strategy.position_size * sellPercentage / 100
+        positionValueInDollars = strategy.position_size * close
+        actualSellCash = positionValueInDollars * sellPercentage / 100
         // Enforce minimum sell amount
         actualSellCash := math.max(actualSellCash, minimumSellCash)
         actualSellQty = math.min(actualSellCash / close, strategy.position_size)
@@ -186,9 +187,12 @@ plot(showPositionSize ? strategy.position_size : na, "Position Size", color=colo
 currentCryptoDollars = strategy.position_size
 currentCryptoValue = strategy.position_size * close
 currentCash = strategy.equity - currentCryptoValue
+
+// Plot current cash line
+plot(currentCash, "Current Cash", color=color.orange, linewidth=2, style=plot.style_line)
 portfolioValue = strategy.equity
 nextBuyValue = strategy.equity * buyPercentage / 100
-nextSellValue = strategy.position_size * sellPercentage / 100
+nextSellValue = strategy.position_size * close * sellPercentage / 100
 
 // Plot values to data window
 plot(currentCryptoDollars, "Current Crypto (#)", display=display.data_window)

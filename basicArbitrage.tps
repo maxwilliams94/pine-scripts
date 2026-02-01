@@ -60,6 +60,8 @@ var float averageCostBasis = na
 // Track realized profit from closed trades
 var float totalRealizedProfit = 0.0
 var int lastClosedTradesCount = 0
+// Last bar index when we placed an order (dedupe) - init to -1 so first bar's check passes
+var int lastOrderBar = -1
 
 // Initialize cost basis on first bar
 if barstate.isfirst
@@ -127,12 +129,17 @@ if enableBuy and buySignal and inTradingWindow
     
     if actualBuyQuantity > 0
         buyComment = "BUY $" + str.tostring(actualBuyCash, "#,##0.00")
-        strategy.order("Buy Order", strategy.long, qty=actualBuyQuantity, comment=buyComment)
-        // Update cost basis for buy
-        totalCostBasis := totalCostBasis + (actualBuyQuantity * close)
-        totalQuantityHeld := totalQuantityHeld + actualBuyQuantity
-        if totalQuantityHeld > 0
-            averageCostBasis := totalCostBasis / totalQuantityHeld
+        // Only place order after bar closes. Dedupe per bar.
+        if barstate.isconfirmed and lastOrderBar != bar_index
+            // Build alert payload for emulated fill notifications
+            alertMsg = '{"symbol":"LTC-EUR","action":"buy","quantity_type":"cash","quantity":' + str.tostring(actualBuyCash, "#.##") + ',"close":' + str.tostring(close, "#.##") + ',"password":"xxx"}'
+            strategy.order("Buy Order", strategy.long, qty=actualBuyQuantity, comment=buyComment, alert_message=alertMsg)
+            lastOrderBar := bar_index
+            // Update cost basis for buy
+            totalCostBasis := totalCostBasis + (actualBuyQuantity * close)
+            totalQuantityHeld := totalQuantityHeld + actualBuyQuantity
+            if totalQuantityHeld > 0
+                averageCostBasis := totalCostBasis / totalQuantityHeld
 
 // SELL CONDITION: Price movement meets sell threshold, we're in the trading window, and we have a position
 if enableSell and sellSignal and inTradingWindow and strategy.position_size > 0
@@ -145,16 +152,21 @@ if enableSell and sellSignal and inTradingWindow and strategy.position_size > 0
         
         if actualSellQty > 0
             sellComment = "SELL $" + str.tostring(actualSellQty * close, "#,##0.00")
-            strategy.order("Sell Order", strategy.short, qty=actualSellQty, comment=sellComment)
-            // Update cost basis for sell
-            if totalQuantityHeld > 0
-                costRemoved = (actualSellQty / totalQuantityHeld) * totalCostBasis
-                totalCostBasis := math.max(0, totalCostBasis - costRemoved)
-                totalQuantityHeld := math.max(0, totalQuantityHeld - actualSellQty)
+            // Only place order after bar closes. Dedupe per bar.
+            if barstate.isconfirmed and lastOrderBar != bar_index
+                // Build alert payload for emulated fill notifications
+                alertMsg = '{"symbol":"LTC-EUR","action":"sell","quantity_type":"cash","quantity":' + str.tostring(actualSellQty * close, "#.##") + ',"close":' + str.tostring(close, "#.##") + ',"password":"xxx"}'
+                strategy.order("Sell Order", strategy.short, qty=actualSellQty, comment=sellComment, alert_message=alertMsg)
+                lastOrderBar := bar_index
+                // Update cost basis for sell
                 if totalQuantityHeld > 0
-                    averageCostBasis := totalCostBasis / totalQuantityHeld
-                else
-                    averageCostBasis := 0.0
+                    costRemoved = (actualSellQty / totalQuantityHeld) * totalCostBasis
+                    totalCostBasis := math.max(0, totalCostBasis - costRemoved)
+                    totalQuantityHeld := math.max(0, totalQuantityHeld - actualSellQty)
+                    if totalQuantityHeld > 0
+                        averageCostBasis := totalCostBasis / totalQuantityHeld
+                    else
+                        averageCostBasis := 0.0
 
 // EXIT ON LAST BAR: Close all positions if enabled
 if exitOnLastBar and isLastBar and strategy.position_size > 0
